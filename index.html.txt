@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hazard Reporter - Definite PDF Pagination Page-Break Control</title>
+    <!-- Leaflet CSS for Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            display: flex;
+            height: 100vh;
+            background-color: #f4f4f9;
+        }
+
+        /* Sidebar Styling */
+        #sidebar {
+            width: 380px;
+            background: #fff;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            z-index: 1000;
+        }
+
+        header {
+            padding: 15px 20px;
+            background: #e74c3c;
+            color: white;
+        }
+
+        header h1 { font-size: 1.4rem; }
+        
+        /* Calendar UI Styling */
+        #calendar-container {
+            background: #fff;
+            padding: 12px 15px;
+            border-bottom: 2px solid #eaeaea;
+        }
+
+        .cal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .cal-btn {
+            background: none;
+            border: none;
+            color: #e74c3c;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 2px 8px;
+            font-size: 1rem;
+        }
+        
+        .cal-btn:hover { background: #f5f5f5; border-radius: 4px; }
+
+        .cal-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+            text-align: center;
+        }
+
+        .weekday-label {
+            font-size: 0.7rem;
+            font-weight: bold;
+            color: #aaa;
+            text-transform: uppercase;
+            padding-bottom: 4px;
+        }
+
+        .cal-day {
+            font-size: 0.8rem;
+            padding: 6px 0;
+            border-radius: 4px;
+            color: #444;
+            cursor: pointer;
+            position: relative;
+            user-select: none;
+        }
+
+        .cal-day:hover { background: #f0f0f0; }
+        .cal-day.empty { cursor: default; background: none !important; }
+
+        /* Notification Dot indicator for records */
+        .cal-day.has-records::after {
+            content: '';
+            position: absolute;
+            bottom: 2px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 4px;
+            background-color: #e74c3c;
+            border-radius: 50%;
+        }
+
+        .cal-day.selected {
+            background: #e74c3c !important;
+            color: white !important;
+            font-weight: bold;
+        }
+        .cal-day.selected::after { background-color: white; }
+
+        .filter-banner {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            background: #fdf2f0;
+            padding: 10px 15px;
+            font-size: 0.75rem;
+            border-bottom: 1px solid #fadbd8;
+        }
+
+        .filter-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            color: #c0392b;
+        }
+
+        .clear-filter-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 2px 6px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .pdf-export-btn {
+            background: #2980b9;
+            color: white;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            text-align: center;
+            font-size: 0.8rem;
+            width: 100%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .pdf-export-btn:hover { background: #2471a3; }
+
+        #hazard-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .hazard-item {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            border-left: 5px solid #e74c3c;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .hazard-item:hover { background: #f0f0f0; }
+        .hazard-item.resolved { border-left-color: #2ecc71; }
+        .hazard-item h3 { font-size: 1.1rem; color: #333; }
+        .hazard-item .desc-text { font-size: 0.9rem; color: #555; margin-top: 6px; line-height: 1.3; }
+
+        .hazard-meta {
+            font-size: 0.75rem;
+            color: #777;
+            margin-top: 6px;
+            background: #eee;
+            padding: 6px 8px;
+            border-radius: 4px;
+            display: block;
+            line-height: 1.4;
+        }
+
+        .hazard-item .status {
+            display: inline-block;
+            padding: 2px 6px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            border-radius: 3px;
+            margin-top: 8px;
+            margin-right: 5px;
+        }
+        .status.unresolved { background: #fadbd8; color: #c0392b; }
+        .status.fixed { background: #d4efdf; color: #27ae60; }
+
+        .section-label {
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #666;
+            margin-top: 10px;
+            display: block;
+        }
+
+        .log-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 5px;
+        }
+
+        .log-box img { width: 100%; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; }
+        .log-box span { display: block; font-size: 0.7rem; color: #777; text-align: center; }
+
+        .action-btn {
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            margin-top: 10px;
+            width: 100%;
+            font-weight: bold;
+        }
+        .resolve-btn { background: #2ecc71; }
+        .resolve-btn:hover { background: #27ae60; }
+        .reopen-btn { background: #f39c12; }
+        .reopen-btn:hover { background: #d35400; }
+        .save-photo-btn { background: #34495e; margin-top: 5px;}
+        .save-photo-btn:hover { background: #2c3e50; }
+
+        #map { flex: 1; height: 100%; }
+
+        /* Form Popup Inside Map */
+        .popup-form { min-width: 250px; max-height: 400px; overflow-y: auto; padding-right: 5px; }
+        .popup-form label { display: block; font-weight: bold; margin-bottom: 3px; font-size: 0.85rem; color: #444; }
+        .popup-form input[type="text"], .popup-form textarea { width: 100%; padding: 6px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; }
+        
+        .popup-form input[readonly] { 
+            background-color: #eaeaea; 
+            color: #555; 
+            border: 1px solid #ccc; 
+            cursor: not-allowed; 
+        }
+        .popup-form textarea { resize: vertical; height: 50px; }
+        .popup-form input[type="file"] { font-size: 0.8rem; margin-bottom: 12px; width: 100%; }
+        .popup-form button { background: #e74c3c; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; }
+
+        /* Hidden PDF Native Engine Blueprint Element Stylesheet */
+        #pdf-render-blueprint {
+            position: absolute;
+            left: -9999px;
+            top: -9999px;
+            width: 700px; /* Locked explicit layout constraints to scale 1:1 on canvas conversions */
+            background: #fff;
+            padding: 10px;
+            color: #333;
+        }
+        .pdf-header {
+            border-bottom: 3px solid #e74c3c;
+            padding-bottom: 12px;
+            margin-bottom: 25px;
+            background: #fff;
+        }
+        .pdf-title { font-size: 24px; font-weight: bold; color: #e74c3c; }
+        .pdf-date-subtitle { font-size: 14px; color: #666; margin-top: 4px; }
+        
+        .pdf-card {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+            background: #fff;
+        }
+        .pdf-card-title { font-size: 16px; font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 4px; margin-bottom: 8px; }
+        .pdf-row { display: flex; margin-bottom: 12px; gap: 15px; }
+        .pdf-details { flex: 1; font-size: 12px; line-height: 1.5; }
+        .pdf-img-box { width: 180px; text-align: center; }
+        .pdf-img-box img { width: 100%; height: 130px; object-fit: cover; border-radius: 4px; border: 1px solid #ccc; }
+        .pdf-gallery { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; border-top: 1px dashed #eee; padding-top: 8px; }
+        .pdf-gallery-item { width: 80px; text-align: center; font-size: 10px; color: #777; }
+        .pdf-gallery-item img { width: 80px; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <header>
+            <h1>Hazard Reporter</h1>
+        </header>
+        
+        <!-- Live Calendar Block Interface -->
+        <div id="calendar-container">
+            <div class="cal-header">
+                <button class="cal-btn" onclick="adjustMonth(-1)">‹</button>
+                <span id="cal-month-year"></span>
+                <button class="cal-btn" onclick="adjustMonth(1)">›</button>
+            </div>
+            <div class="cal-grid" id="calendar-grid"></div>
+        </div>
+
+        <div id="filter-banner" class="filter-banner" style="display: none;">
+            <div class="filter-row">
+                <span id="filter-text">Showing: YYYY-MM-DD</span>
+                <button class="clear-filter-btn" onclick="clearDateFilter()">Show All</button>
+            </div>
+            <button id="pdf-btn" class="pdf-export-btn" onclick="exportSelectedDayToPDF()" style="display: none;">
+                📥 Export Day to PDF Report
+            </button>
+        </div>
+
+        <div id="hazard-list"></div>
+    </div>
+
+    <div id="map"></div>
+
+    <!-- Hidden blueprint workspace container for rendering clean PDF templates -->
+    <div id="pdf-render-blueprint"></div>
+
+    <!-- Leaflet JS & PDF Compilation Libraries -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+        const map = L.map('map').setView([51.505, -0.09], 13); 
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        map.locate({setView: true, maxZoom: 14});
+
+        let temporaryMarker = null;
+        
+        // Load initial records from localStorage
+        const hazards = JSON.parse(localStorage.getItem('hazard_reports')) || [];
+        
+        let currentCalendarDate = new Date(); 
+        let selectedFilterDateString = null; 
+
+        function getFormattedTimestamp() {
+            return new Date().toLocaleString();
+        }
+
+        function makeIsoDateString(dateObj) {
+            const year = dateObj.getFullYear();
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const day = String(dateObj.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function saveToLocalStorage() {
+            try {
+                const cleanData = hazards.map(({ marker, ...rest }) => rest);
+                localStorage.setItem('hazard_reports', JSON.stringify(cleanData));
+            } catch (e) {
+                console.error("Local storage allocation failed", e);
+                alert("Storage full! Clear browser data or upload smaller logs.");
+            }
+        }
+
+        function initializeSavedMarkers() {
+            hazards.forEach(hazard => {
+                const permanentMarker = L.marker([hazard.lat, hazard.lng]).addTo(map);
+                updateMarkerPopup(permanentMarker, hazard);
+                hazard.marker = permanentMarker;
+            });
+        }
+
+        // Handle Map Clicks
+        map.on('click', function(e) {
+            const lat = e.latlng.lat;
+            const lng = e.latlng.lng;
+            const latLngString = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+            if (temporaryMarker) { map.removeLayer(temporaryMarker); }
+
+            temporaryMarker = L.marker([lat, lng]).addTo(map);
+            
+            const formHtml = `
+                <div class="popup-form">
+                    <label>Staff Member Name</label>
+                    <input type="text" id="hazard-staff" placeholder="e.g., Alex Johnson" autofocus>
+
+                    <label>Date & Time</label>
+                    <input type="text" id="hazard-time" value="${getFormattedTimestamp()}" readonly>
+
+                    <label>Coordinates (Lat, Lng)</label>
+                    <input type="text" id="hazard-coords" value="${latLngString}" readonly>
+
+                    <label>Hazard Title</label>
+                    <input type="text" id="hazard-title" placeholder="e.g., Damaged Signage">
+                    
+                    <label>Details / Description</label>
+                    <textarea id="hazard-desc" placeholder="Describe layout, issues, or risks..."></textarea>
+                    
+                    <label>Hazard Photo:</label>
+                    <input type="file" id="hazard-before-img" accept="image/*">
+                    
+                    <button onclick="saveHazard(${lat}, ${lng})">Submit Report</button>
+                </div>
+            `;
+            
+            temporaryMarker.bindPopup(formHtml).openPopup();
+        });
+
+        // Dynamic Browser Image Compressor Logic
+        function compressAndConvertImage(file) {
+            return new Promise((resolve, reject) => {
+                if (!file) { resolve(null); return; }
+                
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = function(event) {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = function() {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+                        const max_size = 800; 
+
+                        if (width > height) {
+                            if (width > max_size) {
+                                height *= max_size / width;
+                                width = max_size;
+                            }
+                        } else {
+                            if (height > max_size) {
+                                width *= max_size / height;
+                                height = max_size;
+                            }
+                        }
+
+                        canvas.width = width;
+                        canvas.height = height;
+                        
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        
+                        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                        resolve(compressedBase64);
+                    };
+                    img.onerror = error => reject(error);
+                };
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        // Save Hazard Data
+        window.saveHazard = async function(lat, lng) {
+            const staff = document.getElementById('hazard-staff').value.trim();
+            const timestamp = document.getElementById('hazard-time').value.trim();
+            const locationStr = document.getElementById('hazard-coords').value;
+            const title = document.getElementById('hazard-title').value.trim();
+            const description = document.getElementById('hazard-desc').value.trim();
+            const fileInput = document.getElementById('hazard-before-img');
+            
+            if (!staff) { alert("Please log the Staff Member Name!"); return; }
+            if (!title) { alert("Please enter a hazard title!"); return; }
+
+            let beforePhotoBase64 = null;
+            if (fileInput.files.length > 0) {
+                beforePhotoBase64 = await compressAndConvertImage(fileInput.files[0]);
+            }
+
+            const assignmentMoment = new Date();
+
+            const newHazard = {
+                id: Date.now(),
+                staff: staff,
+                timestamp: timestamp, 
+                isoDate: makeIsoDateString(assignmentMoment),
+                coordinates: locationStr,
+                title: title,
+                description: description,
+                lat: lat,
+                lng: lng,
+                status: 'Unresolved',
+                beforePhoto: beforePhotoBase64,
+                updatePhotos: []
+            };
+
+            hazards.push(newHazard);
+
+            map.removeLayer(temporaryMarker);
+            temporaryMarker = null;
+
+            const permanentMarker = L.marker([lat, lng]).addTo(map);
+            updateMarkerPopup(permanentMarker, newHazard);
+            
+            newHazard.marker = permanentMarker;
+            
+            saveToLocalStorage();
+            renderCalendar();
+            updateSidebar();
+        };
+
+        function updateMarkerPopup(marker, hazard) {
+            let popupContent = `
+                <div style="font-family: sans-serif; line-height: 1.4; max-width: 250px;">
+                    <b style="font-size:1.1rem; color:${hazard.status === 'Resolved' ? '#2ecc71' : '#e74c3c'};">${hazard.title}</b><br>
+                    <span style="font-size:0.75rem; color:#666;">By: ${hazard.staff} on ${hazard.timestamp}</span><br>
+                    <span style="font-size:0.75rem; color:#888; display:block; margin-top:2px;">📍 ${hazard.coordinates}</span>
+                    ${hazard.description ? `<p style="margin: 6px 0; color:#444; background:#f5f5f5; padding:4px; border-radius:4px; font-size:0.85rem;">${hazard.description}</p>` : '<br>'}
+                    <b>Status:</b> ${hazard.status}
+                </div>
+            `;
+            marker.bindPopup(popupContent);
+        }
+
+        window.addSequentialUpdatePhoto = async function(id) {
+            const fileInput = document.getElementById(`log-img-${id}`);
+            if (fileInput.files.length === 0) { alert("Please select or take an update picture first!"); return; }
+
+            const hazard = hazards.find(h => h.id === id);
+            
+            const base64Img = await compressAndConvertImage(fileInput.files[0]);
+            if (base64Img) {
+                hazard.updatePhotos.push(base64Img);
+                updateMarkerPopup(hazard.marker, hazard);
+                saveToLocalStorage();
+                updateSidebar();
+            }
+        };
+
+        window.setStatusResolved = function(id) {
+            const hazard = hazards.find(h => h.id === id);
+            
+            if (!hazard.updatePhotos || hazard.updatePhotos.length === 0) {
+                alert("Action Blocked: You must upload at least one 'Update Photo' confirming remediation progress before changing this record status to Resolved!");
+                return;
+            }
+
+            hazard.status = 'Resolved';
+            updateMarkerPopup(hazard.marker, hazard);
+            saveToLocalStorage();
+            updateSidebar();
+        };
+
+        window.setStatusUnresolved = function(id) {
+            const hazard = hazards.find(h => h.id === id);
+            hazard.status = 'Unresolved';
+            updateMarkerPopup(hazard.marker, hazard);
+            saveToLocalStorage();
+            updateSidebar();
+        };
+
+        /* CALENDAR GENERATION ALGORITHMS */
+        function renderCalendar() {
+            const grid = document.getElementById('calendar-grid');
+            const monthYearLabel = document.getElementById('cal-month-year');
+            grid.innerHTML = '';
+
+            const year = currentCalendarDate.getFullYear();
+            const month = currentCalendarDate.getMonth();
+
+            monthYearLabel.innerText = currentCalendarDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+            const daysOfWeek = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+            daysOfWeek.forEach(day => {
+                const label = document.createElement('div');
+                label.className = 'weekday-label';
+                label.innerText = day;
+                grid.appendChild(label);
+            });
+
+            const firstDayIndex = new Date(year, month, 1).getDay();
+            const totalDays = new Date(year, month + 1, 0).getDate();
+
+            for (let i = 0; i < firstDayIndex; i++) {
+                const emptyCell = document.createElement('div');
+                emptyCell.className = 'cal-day empty';
+                grid.appendChild(emptyCell);
+            }
+
+            for (let day = 1; day <= totalDays; day++) {
+                const dayCell = document.createElement('div');
+                dayCell.className = 'cal-day';
+                dayCell.innerText = day;
+
+                const currentISO = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                
+                const dateHasRecords = hazards.some(h => h.isoDate === currentISO);
+                if (dateHasRecords) {
+                    dayCell.classList.add('has-records');
+                }
+
+                if (selectedFilterDateString === currentISO) {
+                    dayCell.classList.add('selected');
+                }
+
+                dayCell.addEventListener('click', () => handleCalendarDaySelection(currentISO));
+                grid.appendChild(dayCell);
+            }
+        }
+
+        window.adjustMonth = function(direction) {
+            currentCalendarDate.setMonth(currentCalendarDate.getMonth() + direction);
+            renderCalendar();
+        };
+
+        function handleCalendarDaySelection(dateString) {
+            if (selectedFilterDateString === dateString) {
+                clearDateFilter();
+            } else {
+                selectedFilterDateString = dateString;
+                document.getElementById('filter-banner').style.display = 'flex';
+                document.getElementById('filter-text').innerText = `Date Filter active: ${dateString}`;
+                
+                const hasMatchingReports = hazards.some(h => h.isoDate === dateString);
+                document.getElementById('pdf-btn').style.display = hasMatchingReports ? 'block' : 'none';
+
+                renderCalendar();
+                updateSidebar();
+            }
+        }
+
+        window.clearDateFilter = function() {
+            selectedFilterDateString = null;
+            document.getElementById('filter-banner').style.display = 'none';
+            document.getElementById('pdf-btn').style.display = 'none';
+            renderCalendar();
+            updateSidebar();
+        };
+
+        /* 📄 AUTOMATED PDF GENERATION - SEQUENTIAL CARD COPIES (PREVENTS PAGE SPLITTING) */
+        window.exportSelectedDayToPDF = async function() {
+            if (!selectedFilterDateString) return;
+
+            const targetReports = hazards.filter(h => h.isoDate === selectedFilterDateString);
+            if (targetReports.length === 0) {
+                alert("No reports found on this date to export.");
+                return;
+            }
+
+            const pdfBtn = document.getElementById('pdf-btn');
+            pdfBtn.innerText = "⏳ Programmatic Layout Calculation...";
+            pdfBtn.disabled = true;
+
+            // 1. Sort logic: Unresolved items are grouped at the top
+            const sortedReports = [...targetReports].sort((a, b) => {
+                if (a.status === 'Unresolved' && b.status === 'Resolved') return -1;
+                if (a.status === 'Resolved' && b.status === 'Unresolved') return 1;
+                return b.id - a.id; 
+            });
+
+            // 2. Clear and build out nodes independently inside the blueprint workspace container
+            const blueprint = document.getElementById('pdf-render-blueprint');
+            blueprint.innerHTML = ""; 
+
+            let fallbackSvg = `<svg width='180' height='130' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23eee'/><text x='50%25' y='50%25' font-size='10' dominant-baseline='middle' text-anchor='middle' fill='%23aaa'>No Photo</text></svg>`;
+
+            // Inject Report Header Element
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'pdf-header';
+            headerDiv.innerHTML = `
+                <div class="pdf-title">Hazard Operations Report</div>
+                <div class="pdf-date-subtitle">Log Date: <b>${selectedFilterDateString}</b> | Total Active Events: ${sortedReports.length}</div>
+            `;
+            blueprint.appendChild(headerDiv);
+
+            // Append each card as its own DOM Node object
+            sortedReports.forEach((report, idx) => {
+                let statusColor = report.status === 'Resolved' ? '#2ecc71' : '#e74c3c';
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'pdf-card';
+                
+                let cardHtml = `
+                    <div class="pdf-card-title" style="color: ${statusColor};">#${idx + 1} - ${report.title} [Status: ${report.status}]</div>
+                    <div class="pdf-row">
+                        <div class="pdf-details">
+                            <b>Logged By:</b> ${report.staff}<br>
+                            <b>Timestamp:</b> ${report.timestamp}<br>
+                            <b>Location:</b> ${report.coordinates}<br><br>
+                            <b>Description:</b><br>
+                            <p style="background:#f9f9f9; padding:6px; border-radius:4px; margin-top:4px; color:#555;">
+                                ${report.description || 'No descriptive context supplied.'}
+                            </p>
+                        </div>
+                        <div class="pdf-img-box">
+                            <b>Initial Capture:</b><br>
+                            <img src="${report.beforePhoto || 'data:image/svg+xml;utf8,' + fallbackSvg}" style="margin-top:4px;">
+                        </div>
+                    </div>
+                `;
+
+                if (report.updatePhotos && report.updatePhotos.length > 0) {
+                    cardHtml += `<div class="pdf-gallery">`;
+                    report.updatePhotos.forEach((photo, pIdx) => {
+                        cardHtml += `
+                            <div class="pdf-gallery-item">
+                                <img src="${photo}">
+                                <span>Update #${pIdx + 1}</span>
+                            </div>
+                        `;
+                    });
+                    cardHtml += `</div>`;
+                }
+
+                cardDiv.innerHTML = cardHtml;
+                blueprint.appendChild(cardDiv);
+            });
+
+            try {
+                // 3. Setup core jsPDF parameters
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                
+                const printableWidth = 190; 
+                const pageHeightLimit = 275; 
+                let currentY = 15; 
+
+                // 4. Render header element canvas
+                const headerCanvas = await html2canvas(headerDiv, { scale: 2, useCORS: true });
+                const headerImgData = headerCanvas.toDataURL('image/jpeg', 0.95);
+                const headerH = (headerCanvas.height * printableWidth) / headerCanvas.width;
+                
+                pdf.addImage(headerImgData, 'JPEG', 10, currentY, printableWidth, headerH);
+                currentY += headerH + 10; 
+
+                // 5. Select and map card nodes sequentially, running strict boundary calculations
+                const generatedCards = blueprint.querySelectorAll('.pdf-card');
+                
+                for (let i = 0; i < generatedCards.length; i++) {
+                    const currentCardNode = generatedCards[i];
+                    
+                    // Generate independent element canvas snapshot
+                    const cardCanvas = await html2canvas(currentCardNode, { scale: 2, useCORS: true });
+                    const cardImgData = cardCanvas.toDataURL('image/jpeg', 0.95);
+                    const cardH = (cardCanvas.height * printableWidth) / cardCanvas.width;
+
+                    // PREVENT PAGE SPLIT: Check if adding this card breaks A4 layout boundaries
+                    if (currentY + cardH > pageHeightLimit) {
+                        pdf.addPage();
+                        currentY = 15; // Reset tracking pointer coordinate to the top margin of the new page
+                    }
+
+                    // Write card content directly to document canvas layer
+                    pdf.addImage(cardImgData, 'JPEG', 10, currentY, printableWidth, cardH);
+                    currentY += cardH + 8; // Introduce safe spacing gap before running the next calculation loop
+                }
+
+                // 6. Download the generated document
+                pdf.save(`Hazard-Report-${selectedFilterDateString}.pdf`);
+            } catch (err) {
+                console.error("Programmatic canvas execution failure: ", err);
+                alert("PDF engine failed to compile perfectly due to internal sizing calculation constraints.");
+            } finally {
+                blueprint.innerHTML = ""; // Wipe workspace clean
+                pdfBtn.innerText = "📥 Export Day to PDF Report";
+                pdfBtn.disabled = false;
+            }
+        };
+
+        function updateSidebar() {
+            const listContainer = document.getElementById('hazard-list');
+            listContainer.innerHTML = ''; 
+
+            let filteredHazards = selectedFilterDateString 
+                ? hazards.filter(h => h.isoDate === selectedFilterDateString)
+                : hazards;
+
+            filteredHazards.sort((a, b) => b.id - a.id);
+
+            if (filteredHazards.length === 0) {
+                listContainer.innerHTML = selectedFilterDateString
+                    ? `<p style="color: #999; text-align: center; margin-top: 20px;">No reports filed on ${selectedFilterDateString}.</p>`
+                    : '<p style="color: #999; text-align: center; margin-top: 20px;">No hazards reported yet.</p>';
+                return;
+            }
+
+            filteredHazards.forEach(hazard => {
+                const isResolved = hazard.status === 'Resolved';
+                const item = document.createElement('div');
+                item.className = `hazard-item ${isResolved ? 'resolved' : ''}`;
+                
+                const fallbackImg = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23eee'/><text x='50%25' y='50%25' font-size='12' dominant-baseline='middle' text-anchor='middle' fill='%23aaa'>No Photo</text></svg>";
+
+                let sideBarContent = `
+                    <h3>${hazard.title}</h3>
+                    ${hazard.description ? `<p class="desc-text">${hazard.description}</p>` : ''}
+                    
+                    <div class="hazard-meta">
+                        👤 Logged by: <b>${hazard.staff}</b><br>
+                        📅 ${hazard.timestamp}<br>
+                        📍 Coords: ${hazard.coordinates}
+                    </div>
+                    
+                    <span class="status ${isResolved ? 'fixed' : 'unresolved'}">${hazard.status}</span>
+                    
+                    <span class="section-label">Hazard:</span>
+                    <div style="width:100%; text-align:center; margin-top:5px;">
+                        <img src="${hazard.beforePhoto || fallbackImg}" alt="Hazard Case" style="width:100%; height:120px; object-fit:cover; border-radius:4px; border:1px solid #ddd;">
+                    </div>
+                `;
+
+                if (hazard.updatePhotos && hazard.updatePhotos.length > 0) {
+                    sideBarContent += `
+                        <span class="section-label">Update Log (${hazard.updatePhotos.length}):</span>
+                        <div class="log-container">
+                    `;
+                    hazard.updatePhotos.forEach((photo, index) => {
+                        sideBarContent += `
+                            <div class="log-box">
+                                <img src="${photo}" alt="Update ${index+1}">
+                                <span>#${index+1}</span>
+                            </div>
+                        `;
+                    });
+                    sideBarContent += `</div>`;
+                }
+
+                sideBarContent += `
+                    <div style="margin-top: 12px; border-top: 1px dashed #ddd; padding-top: 8px;" onclick="event.stopPropagation();">
+                        ${!isResolved ? `
+                            <div style="background:#f0f3f4; padding:8px; border-radius:4px; margin-bottom:8px;">
+                                <label style="font-size:0.75rem; font-weight:bold; display:block; margin-bottom:4px; color:#2c3e50;">
+                                    📷 Add Further Log Updates:
+                                </label>
+                                <input type="file" id="log-img-${hazard.id}" accept="image/*" style="font-size:0.75rem; width:100%;">
+                                <button class="action-btn save-photo-btn" onclick="addSequentialUpdatePhoto(${hazard.id})">
+                                    Upload Additional Update Photo
+                                </button>
+                            </div>
+                            <button class="action-btn resolve-btn" onclick="setStatusResolved(${hazard.id})">
+                                Mark Status as Resolved ✔
+                            </button>
+                        ` : `
+                            <button class="action-btn reopen-btn" onclick="setStatusUnresolved(${hazard.id})">
+                                Reopen Hazard (Mark Status Unresolved) ⚠
+                            </button>
+                        `}
+                    </div>
+                `;
+
+                item.innerHTML = sideBarContent;
+                
+                item.addEventListener('click', (e) => {
+                    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'TEXTAREA') {
+                        map.flyTo([hazard.lat, hazard.lng], 16);
+                        if(hazard.marker) hazard.marker.openPopup();
+                    }
+                });
+
+                listContainer.appendChild(item);
+            });
+        }
+
+        // Initialize components
+        initializeSavedMarkers();
+        renderCalendar();
+        updateSidebar();
+    </script>
+</body>
+</html>
