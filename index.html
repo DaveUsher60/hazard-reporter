@@ -564,7 +564,6 @@
                 
                 if (!hazard.floorSlot) { hazard.floorSlot = 1; }
                 
-                // Only plot pins matching current layout slot AND selected calendar filter date (if active)
                 const matchesFloor = hazard.floorSlot === currentActiveFloor;
                 const matchesDateFilter = !selectedFilterDateString || hazard.isoDate === selectedFilterDateString;
 
@@ -716,7 +715,6 @@
             map.removeLayer(temporaryMarker);
             temporaryMarker = null;
 
-            // Only plot immediately if it satisfies current date filter state
             if (!selectedFilterDateString || newHazard.isoDate === selectedFilterDateString) {
                 const permanentMarker = L.marker([lat, lng]).addTo(map);
                 updateMarkerPopup(permanentMarker, newHazard);
@@ -853,7 +851,7 @@
                 document.getElementById('filter-text').innerText = `Date Filter active: ${dateString}`;
                 
                 renderCalendar();
-                synchronizeMarkerLayers(); // Refresh structural canvas map layers for selected runtime date boundaries
+                synchronizeMarkerLayers(); 
                 updateSidebar();
             }
         }
@@ -862,7 +860,7 @@
             selectedFilterDateString = null;
             document.getElementById('filter-banner').style.display = 'none';
             renderCalendar();
-            synchronizeMarkerLayers(); // Restore view across complete floor collection index matrix boundaries
+            synchronizeMarkerLayers(); 
             updateSidebar();
         };
 
