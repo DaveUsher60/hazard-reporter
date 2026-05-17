@@ -612,10 +612,10 @@
                     
                     <div class="popup-photo-container">
                         <label>📸 Close-up Photo:</label>
-                        <input type="file" id="hazard-closeup-img" accept="image/*">
+                        <input type="file" id="hazard-closeup-img" accept="image/*" capture="environment">
                         
                         <label style="margin-top: 6px;">🌐 Wide-angle Photo:</label>
-                        <input type="file" id="hazard-wideangle-img" accept="image/*">
+                        <input type="file" id="hazard-wideangle-img" accept="image/*" capture="environment">
                     </div>
                     
                     <button onclick="saveHazard(${lat}, ${lng})">Submit Report</button>
@@ -1083,15 +1083,15 @@
                     
                     if (!isMadeSafe) {
                         sidebarContent += `
-                            <label style="font-size:0.75rem; font-weight:bold; color:#444; display:block;">Upload Interim (Made Safe) Photo:</label>
-                            <input type="file" id="inline-interim-file-${hazard.id}" accept="image/*" style="font-size:0.75rem; width:100%;">
+                            <label style="font-size:0.75rem; font-weight:bold; color:#444; display:block;">Take Interim (Made Safe) Photo:</label>
+                            <input type="file" id="inline-interim-file-${hazard.id}" accept="image/*" capture="environment" style="font-size:0.75rem; width:100%;">
                             <button class="action-btn safe-btn" onclick="event.stopPropagation(); updateSidebarInterimPhoto(${hazard.id})">🛡️ Mark Made Safe (Interim)</button>
                         `;
                     }
 
                     sidebarContent += `
-                            <label style="font-size:0.75rem; font-weight:bold; color:#444; display:block; margin-top:4px;">Upload Final Close-out Photo:</label>
-                            <input type="file" id="inline-after-file-${hazard.id}" accept="image/*" style="font-size:0.75rem; width:100%;">
+                            <label style="font-size:0.75rem; font-weight:bold; color:#444; display:block; margin-top:4px;">Take Final Close-out Photo:</label>
+                            <input type="file" id="inline-after-file-${hazard.id}" accept="image/*" capture="environment" style="font-size:0.75rem; width:100%;">
                             <button class="action-btn save-photo-btn" onclick="event.stopPropagation(); updateSidebarAfterPhoto(${hazard.id})">📸 Process Close-out</button>
                             <button class="action-btn resolve-btn" onclick="event.stopPropagation(); setStatusResolved(${hazard.id})">✔ Manual Override Resolve</button>
                         </div>
