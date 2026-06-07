@@ -3,547 +3,1141 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hazard Reporter (Cloud Sync)</title>
+    <title>Trafford Palazzo Hazard Reporting Dashboard</title>
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { display: flex; height: 100vh; background-color: #f4f4f9; }
-        #sidebar { width: 380px; background: #fff; box-shadow: 2px 0 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; z-index: 1000; }
-        header { padding: 15px 20px; background: #e74c3c; color: white; display: flex; flex-direction: column; gap: 10px; }
-        header h1 { font-size: 1.4rem; }
-        .map-uploader { background: rgba(255,255,255,0.2); padding: 8px; border-radius: 4px; font-size: 0.8rem; }
-        .map-uploader label { display: block; font-weight: bold; margin-bottom: 6px; }
-        .floor-selector-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
-        .floor-btn { background: rgba(255, 255, 255, 0.25); color: white; border: 1px solid rgba(255, 255, 255, 0.4); padding: 6px 4px; font-size: 0.75rem; font-weight: bold; border-radius: 4px; cursor: pointer; text-align: center; }
-        .floor-btn.active { background: white; color: #e74c3c; }
-        .floor-btn.has-map { box-shadow: inset 0 -3px 0 #2c3e50; }
-        .floor-btn.active.has-map { box-shadow: inset 0 -3px 0 #2ecc71; }
-        .file-input-hidden { display: none; }
-        .global-pdf-btn { background: #2c3e50; color: white; border: 1px solid rgba(255,255,255,0.2); padding: 8px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.8rem; width: 100%; }
-        #calendar-container { background: #fff; padding: 12px 15px; border-bottom: 2px solid #eaeaea; }
-        .cal-header { display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; font-weight: bold; color: #333; margin-bottom: 8px; }
-        .cal-btn { background: none; border: none; color: #e74c3c; font-weight: bold; cursor: pointer; padding: 2px 8px; font-size: 1rem; }
-        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
-        .weekday-label { font-size: 0.7rem; font-weight: bold; color: #aaa; text-transform: uppercase; padding-bottom: 4px; }
-        .cal-day { font-size: 0.8rem; padding: 6px 0; border-radius: 4px; color: #444; cursor: pointer; position: relative; }
-        .cal-day:hover { background: #f0f0f0; }
-        .cal-day.empty { cursor: default; background: none !important; }
-        .cal-day.has-records::after { content: ''; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; background-color: #e74c3c; border-radius: 50%; }
-        .cal-day.selected { background: #e74c3c !important; color: white !important; font-weight: bold; }
-        .cal-day.selected::after { background-color: white; }
-        .filter-banner { display: flex; flex-direction: column; gap: 6px; background: #fdf2f0; padding: 10px 15px; font-size: 0.75rem; border-bottom: 1px solid #fadbd8; }
-        .filter-row { display: flex; justify-content: space-between; align-items: center; font-weight: bold; color: #c0392b; }
-        .clear-filter-btn { background: #e74c3c; color: white; border: none; padding: 2px 6px; border-radius: 3px; cursor: pointer; }
-        #hazard-list { flex: 1; overflow-y: auto; padding: 10px; }
-        .hazard-item { background: #f9f9f9; padding: 15px; border-radius: 6px; margin-bottom: 15px; border-left: 5px solid #e74c3c; cursor: pointer; }
-        .hazard-item.resolved { border-left-color: #2ecc71; }
-        .hazard-item.madesafe { border-left-color: #f39c12; }
-        .hazard-item h3 { font-size: 1.1rem; color: #333; }
-        .hazard-item .desc-text { font-size: 0.9rem; color: #555; margin-top: 6px; line-height: 1.3; }
-        .hazard-meta { font-size: 0.75rem; color: #777; margin-top: 6px; background: #eee; padding: 6px 8px; border-radius: 4px; display: block; line-height: 1.4; }
-        .hazard-item .status { display: inline-block; padding: 2px 6px; font-size: 0.75rem; font-weight: bold; border-radius: 3px; margin-top: 8px; margin-right: 5px; }
-        .status.unresolved { background: #fadbd8; color: #c0392b; }
-        .status.safe { background: #fdebd0; color: #d35400; }
-        .status.fixed { background: #d4efdf; color: #27ae60; }
-        .section-label { font-size: 0.8rem; font-weight: bold; color: #666; margin-top: 10px; display: block; }
-        .log-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 5px; }
-        .log-box img { width: 100%; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; background: #eee; }
-        .log-box span { display: block; font-size: 0.6rem; color: #666; text-align: center; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .action-btn { color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; margin-top: 8px; width: 100%; font-weight: bold; }
-        .resolve-btn { background: #2ecc71; }
-        .safe-btn { background: #f39c12; margin-top: 5px; }
-        .reopen-btn { background: #95a5a6; }
-        .save-photo-btn { background: #34495e; margin-top: 5px; }
-        #map { flex: 1; height: 100%; background-color: #f8f5f0; }
-        #map-placeholder { position: absolute; top: 50%; left: 55%; transform: translate(-50%, -50%); text-align: center; background: rgba(255, 255, 255, 0.9); padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); z-index: 500; pointer-events: none; max-width: 400px; }
-        .popup-form { min-width: 280px; max-height: 450px; overflow-y: auto; }
-        .popup-form label { display: block; font-weight: bold; margin-bottom: 3px; font-size: 0.85rem; color: #444; }
-        .popup-form input[type="text"], .popup-form textarea { width: 100%; padding: 6px; margin-bottom: 8px; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; }
-        .popup-form input[readonly] { background-color: #eaeaea; color: #555; cursor: not-allowed; }
-        .popup-form textarea { resize: vertical; height: 45px; }
-        .popup-photo-container { background: #f9f9f9; border: 1px dashed #bbb; padding: 8px; border-radius: 4px; margin-bottom: 10px; }
-        .popup-photo-container input[type="file"] { font-size: 0.75rem; margin-bottom: 6px; width: 100%; }
-        .popup-photo-container input[type="file"]:last-child { margin-bottom: 0; }
-        .popup-form button { background: #e74c3c; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 5px; }
-        #pdf-render-blueprint { position: absolute; left: -9999px; top: -9999px; width: 750px; background: #fff; padding: 10px; }
-        .pdf-header { border-bottom: 3px solid #e74c3c; padding-bottom: 12px; margin-bottom: 25px; }
-        .pdf-title { font-size: 24px; font-weight: bold; color: #e74c3c; }
-        .pdf-date-subtitle { font-size: 14px; color: #666; margin-top: 4px; }
-        .pdf-card { border: 1px solid #ddd; border-radius: 6px; padding: 15px; margin-bottom: 20px; page-break-inside: avoid; }
-        .pdf-card-title { font-size: 16px; font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 4px; margin-bottom: 8px; }
-        .pdf-row { display: flex; margin-bottom: 12px; gap: 15px; }
-        .pdf-details { flex: 1; font-size: 12px; line-height: 1.5; }
-        .pdf-img-container { display: flex; gap: 6px; width: 420px; }
-        .pdf-img-box { flex: 1; text-align: center; }
-        .pdf-img-box img { width: 100%; height: 75px; object-fit: cover; border-radius: 4px; border: 1px solid #ccc; }
-        .pdf-img-box span { font-size: 8px; color: #555; display: block; margin-top: 2px; font-weight: bold; }
+        * {
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            background-color: #f4f5f7;
+            overflow: hidden;
+        }
+
+        /* --- Welcome Page Overlay --- */
+        #welcomeOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle at center, #2d3748 0%, #1a202c 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+        }
+        
+        .welcome-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 35px 35px;
+            border-radius: 24px;
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+            animation: fadeInScale 0.8s ease-out forwards;
+        }
+
+        .app-logo-circle {
+            width: 110px;
+            height: 110px;
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            margin: 0 auto 20px auto;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4), inset 0 0 15px rgba(255,255,255,0.05);
+            padding: 10px;
+        }
+        .logo-text-top {
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            line-height: 1.2;
+        }
+        .logo-text-bottom {
+            color: #cbd5e1;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            line-height: 1.2;
+            margin-top: 2px;
+        }
+
+        .welcome-card h1 {
+            color: #ffffff;
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0 0 12px 0;
+            line-height: 1.3;
+            letter-spacing: -0.5px;
+        }
+
+        .welcome-card p {
+            color: #94a3b8;
+            font-size: 14px;
+            line-height: 1.5;
+            margin: 0 0 20px 0;
+        }
+
+        .welcome-form-group {
+            text-align: left;
+            margin-bottom: 16px;
+            width: 100%;
+        }
+        .welcome-form-group label {
+            display: block;
+            color: #cbd5e1;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            transition: color 0.2s ease, opacity 0.2s ease;
+        }
+        .welcome-input {
+            width: 100%;
+            padding: 12px 14px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            color: #ffffff;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+        }
+        .welcome-input:focus {
+            border-color: #5469d4;
+            box-shadow: 0 0 0 3px rgba(84, 105, 212, 0.25);
+        }
+        .welcome-input::placeholder {
+            color: #64748b;
+        }
+        .welcome-input:disabled {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.3);
+            cursor: not-allowed;
+        }
+
+        .btn-launch {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            background-color: #5469d4;
+            color: #ffffff;
+            border: none;
+            padding: 14px 28px;
+            font-size: 15px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+            box-shadow: 0 4px 12px rgba(84, 105, 212, 0.3);
+            margin-top: 10px;
+        }
+        .btn-launch:hover {
+            background-color: #4354b5;
+            box-shadow: 0 6px 18px rgba(84, 105, 212, 0.4);
+        }
+        .btn-launch:active {
+            transform: scale(0.98);
+        }
+
+        @keyframes fadeInScale {
+            from { opacity: 0; transform: scale(0.95) translateY(10px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        /* --- Main App Layout --- */
+        .app-container {
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* Sidebar Styles */
+        .sidebar {
+            width: 400px;
+            min-width: 400px;
+            background-color: #ffffff;
+            border-right: 1px solid #d8e0e5;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            z-index: 1000;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+        }
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #e3e8ee;
+            background-color: #fafbfb;
+            position: relative;
+        }
+        .sidebar-header h2 {
+            margin: 0;
+            font-size: 20px;
+            color: #1a1f36;
+        }
+        .sidebar-header p {
+            margin: 4px 0 0 0;
+            font-size: 13px;
+            color: #697386;
+        }
+        .btn-print-sidebar {
+            position: absolute;
+            right: 20px;
+            top: 22px;
+            background-color: #2d3748;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .btn-print-sidebar:hover {
+            background-color: #1a202c;
+        }
+
+        /* Location Selector Panel */
+        .location-switch-panel {
+            padding: 14px 20px;
+            background-color: #f8fafc;
+            border-bottom: 1px solid #e3e8ee;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .location-switch-panel label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #4a5568;
+            letter-spacing: 0.5px;
+        }
+        .plan-toggle-container {
+            display: flex;
+            background: #e2e8f0;
+            padding: 4px;
+            border-radius: 8px;
+            border: 1px solid #cbd5e1;
+        }
+        .plan-select-btn {
+            flex: 1;
+            text-align: center;
+            padding: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            color: #475569;
+            transition: all 0.15s ease;
+        }
+        .plan-select-btn.active-plan {
+            background-color: #5469d4;
+            color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* Filter Panel */
+        .filter-panel {
+            padding: 12px 20px;
+            background-color: #f8fafc;
+            border-bottom: 1px solid #e3e8ee;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .filter-panel label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #4a5568;
+            letter-spacing: 0.5px;
+        }
+        .filter-row {
+            display: flex;
+            gap: 8px;
+        }
+        .date-input {
+            flex: 1;
+            padding: 6px 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #334155;
+            outline: none;
+        }
+        .date-input:focus {
+            border-color: #5469d4;
+        }
+        .btn-clear-filter {
+            background-color: #e2e8f0;
+            color: #475569;
+            border: none;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .btn-clear-filter:hover {
+            background-color: #cbd5e1;
+        }
+
+        .report-list {
+            padding: 16px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        
+        /* Summary Cards */
+        .summary-card {
+            background: #ffffff;
+            border: 1px solid #e3e8ee;
+            border-radius: 8px;
+            padding: 14px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            position: relative;
+        }
+        .summary-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+            border-color: #cbd5e1;
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            padding-right: 85px;
+        }
+        .card-actions {
+            position: absolute;
+            right: 14px;
+            top: 14px;
+        }
+        .btn-card-print {
+            background-color: #e2e8f0;
+            color: #1a202c;
+            border: none;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-card-print:hover {
+            background-color: #cbd5e1;
+        }
+        
+        .badge {
+            font-size: 14px;
+            font-weight: 800;
+            padding: 5px 12px;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .badge-unresolved { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+        .badge-resolved { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+        
+        .card-title { font-size: 14px; font-weight: 600; color: #1a1f36; margin: 0; }
+        .card-details { font-size: 12px; color: #4f566b; line-height: 1.5; }
+        .empty-state { text-align: center; color: #a3b1cc; font-size: 14px; margin-top: 40px; }
+
+        /* Card Photo Gallery Layout */
+        .report-gallery-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #8792a2;
+            margin: 10px 0 4px 0;
+            letter-spacing: 0.5px;
+        }
+        .report-photo-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+        .sidebar-preview-img {
+            width: 100%;
+            height: 90px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 1px solid #e3e8ee;
+        }
+
+        /* Map Canvas */
+        #map {
+            flex: 1;
+            height: 100vh;
+            background-color: #1e293b;
+        }
+        
+        /* Marker Pin CSS Filter Targeting */
+        .marker-resolved-green {
+            filter: hue-rotate(220deg) saturate(130%) brightness(95%) !important;
+        }
+
+        /* Map Form Pop-up Styles */
+        .leaflet-popup-content-wrapper { padding: 5px; border-radius: 12px; }
+        .leaflet-popup-content { width: 320px !important; margin: 12px !important; max-height: 440px; overflow-y: auto; }
+        .form-title { margin: 0 0 4px 0; font-size: 18px; color: #1a1f36; }
+        .form-meta { font-size: 11px; color: #697386; margin-bottom: 12px; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #3c4257; }
+        .form-control { width: 100%; padding: 8px; border: 1px solid #d8e0e5; border-radius: 6px; font-size: 13px; }
+        .photo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+        .file-label { display: block; background: #f7fafc; border: 1px dashed #a3b1cc; padding: 10px; border-radius: 6px; text-align: center; cursor: pointer; font-size: 11px; color: #4f566b; }
+        .file-input { display: none; }
+        .preview-img { width: 100%; height: 70px; object-fit: cover; border-radius: 4px; margin-top: 6px; border: 1px solid #d8e0e5; }
+        .dynamic-section { border-left: 3px solid #5469d4; padding: 8px; margin-top: 8px; border-radius: 0 6px 6px 0; }
+        .section-unresolved { background-color: #f0f9ff; border-left-color: #0284c7; }
+        .section-resolved { background-color: #f0fff4; border-left-color: #15803d; }
+        
+        .btn-container { display: flex; justify-content: space-between; margin-top: 16px; gap: 8px; flex-wrap: wrap; }
+        .btn { padding: 8px 12px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; flex: 1; min-width: 70px; }
+        .btn-submit { background-color: #5469d4; color: white; }
+        .btn-cancel { background-color: #f4f5f7; color: #4f566b; }
+
+        /* Custom Status Toggles */
+        .toggle-group {
+            display: flex;
+            background: #edf2f7;
+            padding: 4px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        .toggle-btn {
+            flex: 1;
+            text-align: center;
+            padding: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            color: #718096;
+        }
+        .toggle-btn.active-unresolved {
+            background-color: #0284c7;
+            color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .toggle-btn.active-resolved {
+            background-color: #15803d;
+            color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* Print Formatting rules */
+        @media print {
+            @page { size: portrait; margin: 15mm; }
+            body, html, .app-container { height: auto !important; overflow: visible !important; width: 100% !important; background: #ffffff !important; color: #2d3748 !important; }
+            #welcomeOverlay, #map, .sidebar-header, .location-switch-panel, .filter-panel, .leaflet-popup, .btn-container, .toggle-group, .file-label, .btn-card-print { display: none !important; }
+            .sidebar { width: 100% !important; max-width: none !important; min-width: 0 !important; border: none !important; box-shadow: none !important; overflow: visible !important; height: auto !important; background: transparent !important; }
+            .report-list { overflow: visible !important; height: auto !important; padding: 0 !important; margin: 0 !important; }
+            body.print-single-card-mode .summary-card:not(.target-print-card) { display: none !important; }
+            .summary-card { background: #ffffff !important; box-shadow: none !important; border: 1px solid #e2e8f0 !important; border-radius: 12px !important; padding: 24px !important; margin: 0 !important; page-break-inside: avoid !important; break-inside: avoid-page !important; }
+            .summary-card + .summary-card { page-break-before: always !important; break-before: page !important; }
+            .card-header { padding-right: 0 !important; border-bottom: 2px solid #edf2f7 !important; padding-bottom: 10px !important; margin-bottom: 14px !important; break-inside: avoid !important; }
+            .card-title { font-size: 20px !important; color: #1a202c !important; font-weight: 700 !important; }
+            .card-details { font-size: 13px !important; color: #4a5568 !important; line-height: 1.5 !important; break-inside: avoid !important; }
+            .badge { font-size: 15px !important; padding: 6px 14px !important; border-radius: 6px !important; border: 1px solid transparent !important; font-weight: 800 !important; }
+            .badge-unresolved { background: #f0f9ff !important; color: #0284c7 !important; border-color: #bae6fd !important; }
+            .badge-resolved { background: #dcfce7 !important; color: #15803d !important; border-color: #bbf7d0 !important; }
+            .report-gallery-label { font-size: 11px !important; font-weight: 700 !important; color: #718096 !important; margin: 14px 0 6px 0 !important; border-left: 3px solid #cbd5e1; padding-left: 8px; break-inside: avoid !important; }
+            .report-photo-grid { gap: 10px !important; margin-bottom: 10px !important; break-inside: avoid !important; }
+            .sidebar-preview-img { height: auto !important; max-height: 22vh !important; border-radius: 8px !important; border: 1px solid #e2e2e2 !important; object-fit: cover !important; break-inside: avoid !important; }
+        }
     </style>
 </head>
 <body>
 
-    <div id="sidebar">
-        <header>
-            <h1>Hazard Reporter</h1>
-            <div class="map-uploader">
-                <label>🗺️ Select Location View:</label>
-                <div class="floor-selector-grid">
-                    <button id="floor-btn-1" class="floor-btn" onclick="selectFloorSlot(1)">Ground Floor</button>
-                    <button id="floor-btn-2" class="floor-btn" onclick="selectFloorSlot(2)">First Floor</button>
-                    <button id="floor-btn-3" class="floor-btn" onclick="selectFloorSlot(3)">Car Park</button>
-                    <button id="floor-btn-4" class="floor-btn" onclick="selectFloorSlot(4)">Service Yards</button>
-                </div>
-                <input type="file" id="floorplan-file-hidden" class="file-input-hidden" accept="image/*" onchange="handleFloorplanUpload(this)">
+    <div id="welcomeOverlay">
+        <div class="welcome-card">
+            <div class="app-logo-circle">
+                <div class="logo-text-top">Trafford</div>
+                <div class="logo-text-bottom">Palazzo</div>
             </div>
-            <button id="global-pdf-btn" class="global-pdf-btn" onclick="exportHazardsToPDF()">📥 Export Hazards to PDF</button>
-        </header>
-        
-        <div id="calendar-container">
-            <div class="cal-header">
-                <button class="cal-btn" onclick="adjustMonth(-1)">‹</button>
-                <span id="cal-month-year"></span>
-                <button class="cal-btn" onclick="adjustMonth(1)">›</button>
-            </div>
-            <div class="cal-grid" id="calendar-grid"></div>
-        </div>
-
-        <div id="filter-banner" class="filter-banner" style="display: none;">
-            <div class="filter-row">
-                <span id="filter-text"></span>
-                <button class="clear-filter-btn" onclick="clearDateFilter()">Show All</button>
-            </div>
-        </div>
-
-        <div id="hazard-list"></div>
-    </div>
-
-    <div id="map"></div>
-    
-    <div id="map-placeholder">
-        <h3>No Layout Image Loaded</h3>
-        <p style="font-size: 0.85rem; color: #666; margin-top: 8px;">Please select a location view slot in the sidebar and upload a blueprint image.</p>
-    </div>
-
-    <div id="pdf-render-blueprint"></div>
-
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
-        import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-analytics.js";
-        import { getFirestore, collection, addDoc, updateDoc, doc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
-        import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-storage.js";
-
-        // Verified Firebase Configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyBgcpMUGc94ISClbsqrd626votTigS_i2U",
-            authDomain: "hazard-reporting-app-64474.firebaseapp.com",
-            projectId: "hazard-reporting-app-64474",
-            storageBucket: "hazard-reporting-app-64474.firebasestorage.app",
-            messagingSenderId: "66344073455",
-            appId: "1:66344073455:web:6b8b6663fb172ee3df431a",
-            measurementId: "G-FH1N3KPQXD"
-        };
-
-        // Initialize Native Engines
-        const app = initializeApp(firebaseConfig);
-        const analytics = getAnalytics(app);
-        const db = getFirestore(app);
-        const storage = getStorage(app);
-
-        // Core Layout Definitions
-        const map = L.map('map', { crs: L.CRS.Simple, minZoom: -3, maxZoom: 1 });
-        const mapBounds = [[0, 0], [916, 2200]];
-        let currentImageOverlay = null, temporaryMarker = null, currentActiveFloor = 1, selectedFilterDateString = null;
-        let currentCalendarDate = new Date();
-        
-        let hazards = []; 
-        const floorLabels = { 1: "Ground Floor", 2: "First Floor", 3: "Car Park", 4: "Service Yards" };
-        
-        const floorPlanImages = {
-            1: localStorage.getItem('active_floorplan_image_slot1'),
-            2: localStorage.getItem('active_floorplan_image_slot2'),
-            3: localStorage.getItem('active_floorplan_image_slot3'),
-            4: localStorage.getItem('active_floorplan_image_slot4')
-        };
-
-        refreshFloorSlotButtons();
-        applyFloorplanImage(floorPlanImages[currentActiveFloor]);
-
-        // Database collection dynamic synchronization listener hook
-        const hazardsRef = collection(db, "hazards");
-        const q = query(hazardsRef); 
-
-        onSnapshot(q, (snapshot) => {
-            hazards.forEach(h => { if (h.marker) map.removeLayer(h.marker); });
-            hazards = [];
-            snapshot.forEach((docSnap) => {
-                const data = docSnap.data();
-                data.docId = docSnap.id; 
-                hazards.push(data);
-            });
             
-            // Client fallback dynamic chronological layout sort
-            hazards.sort((a, b) => b.id - a.id);
+            <h1>Welcome to the Trafford Palazzo Hazard Reporting App.</h1>
+            <p>Real-time site risk monitoring, geospatial incident logging, and infrastructure safety compliance manager.</p>
+            
+            <div class="welcome-form-group">
+                <label for="appSessionUsername">Enter name of user *</label>
+                <input type="text" id="appSessionUsername" class="welcome-input" placeholder="Enter name of user" oninput="evaluateNamePrivileges(this.value)" required autocomplete="off">
+            </div>
 
-            synchronizeMarkerLayers();
-            renderCalendar();
-            updateSidebar();
-        }, (error) => {
-            console.error("Firebase Sync Processing Error: ", error);
+            <div class="welcome-form-group">
+                <label id="labelPlan1" style="opacity: 0.5;">Upload Ground Floor Site Plan (Dave Usher Only)</label>
+                <input type="file" id="plan1ImageSelector" class="welcome-input" accept="image/*" disabled>
+            </div>
+
+            <div class="welcome-form-group">
+                <label id="labelPlan2" style="opacity: 0.5;">Upload First Floor Site Plan (Dave Usher Only)</label>
+                <input type="file" id="plan2ImageSelector" class="welcome-input" accept="image/*" disabled>
+            </div>
+
+            <button type="button" class="btn-launch" onclick="launchApplication()">Launch Application</button>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>Hazard Reports</h2>
+                <p>Click location plan to drop a pin, or click a sidebar card to manage it</p>
+                <button type="button" class="btn-print-sidebar" onclick="printAllVisibleCards()">Print Selected</button>
+            </div>
+
+            <div class="location-switch-panel">
+                <label>Active Site Location Plan</label>
+                <div class="plan-toggle-container">
+                    <div id="selectPlan1Btn" class="plan-select-btn active-plan" onclick="switchActivePlan('plan1')">Ground Floor</div>
+                    <div id="selectPlan2Btn" class="plan-select-btn" onclick="switchActivePlan('plan2')">First Floor</div>
+                </div>
+            </div>
+            
+            <div class="filter-panel">
+                <label for="reportDateFilter">Filter Reports By Date</label>
+                <div class="filter-row">
+                    <input type="date" id="reportDateFilter" class="date-input" onchange="filterReportsByDate()">
+                    <button type="button" class="btn-clear-filter" onclick="resetDateFilter()">Reset</button>
+                </div>
+            </div>
+            
+            <div class="report-list" id="reportList">
+                <div class="empty-state" id="emptyState">No hazards reported yet.</div>
+            </div>
+        </div>
+
+        <div id="map"></div>
+    </div>
+
+    <script>
+        // Complete Firebase Regional Live Link Configuration with Production Keys
+        const firebaseConfig = {
+            apiKey: "AIzaSyDj2EkxjR22idq13HgD4tZwq8vwu9QuZ1Y",
+            databaseURL: "https://hazard-app-ii-default-rtdb.europe-west1.firebasedatabase.app/",
+            authDomain: "hazard-app-ii.firebaseapp.com",
+            projectId: "hazard-app-ii",
+            storageBucket: "hazard-app-ii.appspot.com",
+            messagingSenderId: "1031019120165",
+            appId: "1:1031019120165:web:0d029f3f181ed66c75e1cc"
+        };
+
+        // Initialize Firebase connection instance securely
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        } else {
+            firebase.app();
+        }
+        const database = firebase.database();
+
+        // Setup Leaflet to run in non-geographical Simple Pixel Mode
+        const map = L.map('map', {
+            crs: L.CRS.Simple,
+            minZoom: -3,
+            maxZoom: 3,
+            attributionControl: false
         });
 
-        function refreshFloorSlotButtons() {
-            for (let i = 1; i <= 4; i++) {
-                const btn = document.getElementById(`floor-btn-${i}`);
-                if(btn) {
-                    btn.classList.toggle('has-map', !!floorPlanImages[i]);
-                    btn.classList.toggle('active', i === currentActiveFloor);
-                }
-            }
-        }
+        // Track state variables for the two imported image matrices
+        let plansData = {
+            plan1: { dataUrl: null, bounds: [[0,0],[1000,1000]] },
+            plan2: { dataUrl: null, bounds: [[0,0],[1000,1000]] }
+        };
+        let activePlanId = 'plan1'; 
 
-        function selectFloorSlot(floorNum) {
-            if (currentActiveFloor === floorNum && !floorPlanImages[floorNum]) {
-                document.getElementById('floorplan-file-hidden').click();
+        let activeMarker = null;
+        let currentStatusSelection = "unresolved"; 
+        let globalReportsDb = {};
+        let markersDb = {}; 
+        let uploadedFiles = { closeUp: null, wideAngle: null, madeSafePhoto: null, resolutionPhoto: null };
+        let standardUserSessionName = "";
+        let basePlanLayer = null;
+
+        // Automatically evaluates user input to authorize architectural map matrix uploading privileges
+        window.evaluateNamePrivileges = function(inputValue) {
+            const isAuthorizedName = inputValue.trim().toLowerCase() === 'dave usher';
+            const file1 = document.getElementById('plan1ImageSelector');
+            const file2 = document.getElementById('plan2ImageSelector');
+            const lbl1 = document.getElementById('labelPlan1');
+            const lbl2 = document.getElementById('labelPlan2');
+
+            file1.disabled = !isAuthorizedName;
+            file2.disabled = !isAuthorizedName;
+            file1.required = isAuthorizedName;
+            file2.required = isAuthorizedName;
+            
+            lbl1.style.opacity = isAuthorizedName ? "1" : "0.5";
+            lbl2.style.opacity = isAuthorizedName ? "1" : "0.5";
+            lbl1.innerText = isAuthorizedName ? "Upload Ground Floor Site Plan *" : "Upload Ground Floor Site Plan (Dave Usher Only)";
+            lbl2.innerText = isAuthorizedName ? "Upload First Floor Site Plan *" : "Upload First Floor Site Plan (Dave Usher Only)";
+        };
+
+        window.launchApplication = function() {
+            const nameInput = document.getElementById('appSessionUsername');
+            const file1Input = document.getElementById('plan1ImageSelector');
+            const file2Input = document.getElementById('plan2ImageSelector');
+            
+            const trimmedName = nameInput.value.trim();
+            const isDaveUsher = trimmedName.toLowerCase() === 'dave usher';
+            
+            if(!trimmedName) {
+                alert("Please enter your name to gain dashboard access.");
+                nameInput.focus();
                 return;
             }
-            currentActiveFloor = floorNum;
-            refreshFloorSlotButtons();
-            
-            if (floorPlanImages[floorNum]) {
-                applyFloorplanImage(floorPlanImages[floorNum]);
-            } else {
-                if (currentImageOverlay) { map.removeLayer(currentImageOverlay); currentImageOverlay = null; }
-                document.getElementById('map-placeholder').style.display = 'block';
-            }
-            synchronizeMarkerLayers();
-            updateSidebar();
-        }
 
-        function handleFloorplanUpload(inputElement) {
-            if (inputElement.files && inputElement.files[0]) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    floorPlanImages[currentActiveFloor] = e.target.result;
-                    localStorage.setItem(`active_floorplan_image_slot${currentActiveFloor}`, e.target.result);
-                    refreshFloorSlotButtons();
-                    applyFloorplanImage(e.target.result);
-                };
-                reader.readAsDataURL(inputElement.files[0]);
-            }
-        }
+            standardUserSessionName = trimmedName;
 
-        function applyFloorplanImage(base64Data) {
-            if (!base64Data) { document.getElementById('map-placeholder').style.display = 'block'; return; }
-            if (currentImageOverlay) { map.removeLayer(currentImageOverlay); }
-            currentImageOverlay = L.imageOverlay(base64Data, mapBounds).addTo(map);
-            map.invalidateSize();
-            map.setView([458, 1100], -2);
-            document.getElementById('map-placeholder').style.display = 'none';
-        }
-
-        function makeIsoDateString(dateObj) {
-            return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
-        }
-
-        function synchronizeMarkerLayers() {
-            hazards.forEach(hazard => {
-                if (hazard.marker) { map.removeLayer(hazard.marker); hazard.marker = null; }
-                if ((hazard.floorSlot || 1) === currentActiveFloor && (!selectedFilterDateString || hazard.isoDate === selectedFilterDateString)) {
-                    hazard.marker = L.marker([hazard.lat, hazard.lng]).addTo(map);
-                    updateMarkerPopup(hazard.marker, hazard);
+            if (isDaveUsher) {
+                const plan1File = file1Input.files[0];
+                const plan2File = file2Input.files[0];
+                
+                if(!plan1File || !plan2File) {
+                    alert("Welcome Dave! Please attach image files to construct the Ground Floor and First Floor base maps.");
+                    return;
                 }
+
+                const reader1 = new FileReader();
+                reader1.onload = function(e1) {
+                    plansData.plan1.dataUrl = e1.target.result;
+                    
+                    const reader2 = new FileReader();
+                    reader2.onload = function(e2) {
+                        plansData.plan2.dataUrl = e2.target.result;
+                        executeApplicationInitialization();
+                    };
+                    reader2.readAsDataURL(plan2File);
+                };
+                reader1.readAsDataURL(plan1File);
+            } else {
+                plansData.plan1.dataUrl = "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=1200&q=80";
+                plansData.plan2.dataUrl = "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80";
+                executeApplicationInitialization();
+            }
+        };
+
+        function executeApplicationInitialization() {
+            calculatePlanDimensions('plan1', plansData.plan1.dataUrl, () => {
+                calculatePlanDimensions('plan2', plansData.plan2.dataUrl, () => {
+                    
+                    // Activate live cloud sync listener framework
+                    startCloudDatabaseSyncListener();
+                    renderPlanWorkspace('plan1');
+
+                    const overlay = document.getElementById('welcomeOverlay');
+                    overlay.style.opacity = '0';
+                    overlay.style.visibility = 'hidden';
+                });
             });
+        }
+
+        function calculatePlanDimensions(planKey, dataUrl, callback) {
+            const img = new Image();
+            img.onload = function() {
+                const imgWidth = img.width || 1200;
+                const imgHeight = img.height || 800;
+                plansData[planKey].bounds = [[0, 0], [imgHeight, imgWidth]];
+                callback();
+            };
+            img.src = dataUrl;
+        }
+
+        window.switchActivePlan = function(targetPlanId) {
+            if (activePlanId === targetPlanId) return;
+            
+            map.closePopup();
+            if (activeMarker && !markersDb[activeMarker.options.id]) {
+                map.removeLayer(activeMarker);
+            }
+            activeMarker = null;
+
+            activePlanId = targetPlanId;
+
+            document.getElementById('selectPlan1Btn').className = `plan-select-btn ${activePlanId==='plan1'?'active-plan':''}`;
+            document.getElementById('selectPlan2Btn').className = `plan-select-btn ${activePlanId==='plan2'?'active-plan':''}`;
+
+            renderPlanWorkspace(activePlanId);
+        };
+
+        function renderPlanWorkspace(planKey) {
+            const planInfo = plansData[planKey];
+            
+            if (basePlanLayer) {
+                map.removeLayer(basePlanLayer);
+            }
+
+            for (const id in markersDb) {
+                if (map.hasLayer(markersDb[id])) {
+                    map.removeLayer(markersDb[id]);
+                }
+            }
+
+            basePlanLayer = L.imageOverlay(planInfo.dataUrl, planInfo.bounds).addTo(map);
+            map.fitBounds(planInfo.bounds);
+
+            for (const reportId in markersDb) {
+                const marker = markersDb[reportId];
+                const record = globalReportsDb[reportId];
+                
+                if (record && record.associatedPlanId === planKey) {
+                    marker.addTo(map);
+                }
+            }
+
+            setTimeout(() => { map.invalidateSize(); }, 50);
+            filterReportsByDate(); 
         }
 
         map.on('click', function(e) {
-            if (!floorPlanImages[currentActiveFloor]) return;
-            if (temporaryMarker) { map.removeLayer(temporaryMarker); }
+            const currentBounds = plansData[activePlanId].bounds;
+            if (e.latlng.lat < 0 || e.latlng.lat > currentBounds[1][0] || e.latlng.lng < 0 || e.latlng.lng > currentBounds[1][1]) {
+                return; 
+            }
+            openHazardForm(e.latlng.lat, e.latlng.lng, "rep_" + new Date().getTime(), null);
+        });
 
-            const lat = e.latlng.lat, lng = e.latlng.lng;
-            temporaryMarker = L.marker([lat, lng]).addTo(map);
+        window.fitAllPinsOnMap = function() {
+            const matchingMarkers = Object.values(markersDb).filter(m => map.hasLayer(m));
+            if (matchingMarkers.length > 0) {
+                map.fitBounds(L.featureGroup(matchingMarkers).getBounds(), { padding: [50, 50] });
+            } else {
+                map.fitBounds(plansData[activePlanId].bounds);
+            }
+        };
+
+        window.printSingleCard = function(event, reportId) {
+            event.stopPropagation(); 
+            const targetCard = document.getElementById(reportId);
+            if(targetCard) {
+                targetCard.classList.add('target-print-card');
+                document.body.classList.add('print-single-card-mode');
+                window.print();
+                document.body.classList.remove('print-single-card-mode');
+                targetCard.classList.remove('target-print-card');
+            }
+        };
+
+        window.printAllVisibleCards = function() {
+            if (!Array.from(document.getElementsByClassName('summary-card')).some(c => c.style.display !== 'none')) {
+                alert('There are no visible forms in the sidebar panel to print.');
+                return;
+            }
+            document.body.classList.remove('print-single-card-mode');
+            window.print();
+        };
+
+        window.openHazardForm = function(lat, lng, reportId, existingData = null) {
+            if (activeMarker && !markersDb[activeMarker.options.id]) { 
+                map.removeLayer(activeMarker); 
+            }
             
-            temporaryMarker.bindPopup(`
-                <div class="popup-form">
-                    <label>Staff Member Name</label>
-                    <input type="text" id="hazard-staff" placeholder="e.g., Alex Johnson" autofocus>
-                    <label>Date & Time</label>
-                    <input type="text" id="hazard-time" value="${new Date().toLocaleString()}" readonly>
-                    <label>Map Area Location</label>
-                    <input type="text" id="hazard-coords" value="${floorLabels[currentActiveFloor]} - Y: ${lat.toFixed(0)}, X: ${lng.toFixed(0)}" readonly>
-                    <label>Hazard</label>
-                    <input type="text" id="hazard-title" placeholder="e.g., Spillage">
-                    <label>Description</label>
-                    <textarea id="hazard-desc"></textarea>
-                    <div class="popup-photo-container">
-                        <label>📸 Close-up Photo:</label>
-                        <input type="file" id="hazard-closeup-img" accept="image/*" capture="environment">
-                        <label>🌐 Wide-angle Photo:</label>
-                        <input type="file" id="hazard-wideangle-img" accept="image/*" capture="environment">
-                    </div>
-                    <button id="popup-submit-btn">Submit Report</button>
-                </div>
-            `).openPopup();
-        });
+            const fixedLat = parseFloat(lat).toFixed(1);
+            const fixedLng = parseFloat(lng).toFixed(1);
 
-        map.on('popupopen', function() {
-            const btn = document.getElementById('popup-submit-btn');
-            if (btn) {
-                const matches = document.getElementById('hazard-coords').value.match(/Y:\s*([\d.-]+),\s*X:\s*([\d.-]+)/);
-                if(matches) {
-                    btn.onclick = () => saveHazard(parseFloat(matches[1]), parseFloat(matches[2]));
+            if (existingData) {
+                if (existingData.associatedPlanId !== activePlanId) {
+                    switchActivePlan(existingData.associatedPlanId);
                 }
-            }
-        });
-
-        function compressAndConvertImage(file) {
-            return new Promise((resolve) => {
-                if (!file) { resolve(null); return; }
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = function(event) {
-                    const img = new Image();
-                    img.src = event.target.result;
-                    img.onload = function() {
-                        const canvas = document.createElement('canvas');
-                        let width = img.width, height = img.height, max = 800;
-                        if (width > height ? width > max : height > max) {
-                            width > height ? (height *= max / width, width = max) : (width *= max / height, height = max);
-                        }
-                        canvas.width = width; canvas.height = height;
-                        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                        resolve(canvas.toDataURL('image/jpeg', 0.7));
-                    };
+                uploadedFiles = { 
+                    closeUp: existingData.closeUp, 
+                    wideAngle: existingData.wideAngle, 
+                    madeSafePhoto: existingData.madeSafePhoto,
+                    resolutionPhoto: existingData.resolutionPhoto 
                 };
-            });
-        }
-
-        async function uploadPhotoToCloudStorage(base64Data, filename) {
-            if (!base64Data) return null;
-            try {
-                const storageRef = ref(storage, `hazard_photos/${filename}_${Date.now()}.jpg`);
-                await uploadString(storageRef, base64Data, 'data_url');
-                return await getDownloadURL(storageRef);
-            } catch(e) {
-                console.error("Storage System Pipeline Error:", e);
-                return null;
+                currentStatusSelection = existingData.status;
+                activeMarker = markersDb[reportId];
+            } else {
+                uploadedFiles = { closeUp: null, wideAngle: null, madeSafePhoto: null, resolutionPhoto: null };
+                currentStatusSelection = "unresolved";
+                activeMarker = L.marker([lat, lng]).addTo(map);
             }
-        }
 
-        async function saveHazard(lat, lng) {
-            const staff = document.getElementById('hazard-staff').value.trim();
-            const title = document.getElementById('hazard-title').value.trim();
-            if (!staff || !title) { alert("Staff name and Hazard title are required!"); return; }
+            const isEdit = existingData !== null;
+            const defaultReporterValue = isEdit ? existingData.reporter : standardUserSessionName;
+            const contextPlanName = activePlanId === 'plan1' ? 'Ground Floor' : 'First Floor';
 
-            const submitBtn = document.getElementById('popup-submit-btn');
-            submitBtn.innerText = "Uploading to Cloud...";
-            submitBtn.disabled = true;
+            const formHtml = `
+                <div>
+                    <h3 class="form-title">${isEdit ? 'Update Hazard Details' : 'New Hazard Report'}</h3>
+                    <div class="form-meta">Location: <b>${contextPlanName}</b> | Y: ${fixedLat}, X: ${fixedLng}</div>
+                    
+                    <form id="hazardForm">
+                        <div class="form-group">
+                            <label>Reporter Name</label>
+                            <input type="text" id="reporter" class="form-control" value="${defaultReporterValue}" placeholder="John Doe" required />
+                        </div>
+                        <div class="form-group">
+                            <label>Specific Location / Building Note</label>
+                            <input type="text" id="locationNote" class="form-control" value="${isEdit ? existingData.locationNote : ''}" placeholder="e.g., Main entrance walkway" required />
+                        </div>
+                        <div class="form-group">
+                            <label>Hazard Type</label>
+                            <select id="hazardType" class="form-control">
+                                <option value="Slip/Trip/Fall" ${isEdit && existingData.type==='Slip/Trip/Fall' ? 'selected':''}>Slip/Trip/Fall Risk</option>
+                                <option value="Electrical" ${isEdit && existingData.type==='Electrical' ? 'selected':''}>Electrical Issue</option>
+                                <option value="Structural" ${isEdit && existingData.type==='Structural' ? 'selected':''}>Structural Damage</option>
+                                <option value="Fire Safety" ${isEdit && existingData.type==='Fire Safety' ? 'selected':''}>Fire Safety Hazard</option>
+                                <option value="Environmental" ${isEdit && existingData.type==='Environmental' ? 'selected':''}>Environmental Issue</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Hazard Description</label>
+                            <textarea id="description" class="form-control" rows="2" placeholder="Describe the risk details...">${isEdit ? existingData.description : ''}</textarea>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Initial Photos (Required)</label>
+                            <div class="photo-grid">
+                                <div>
+                                    <label class="file-label" for="imgCloseUp">📷 Close-Up</label>
+                                    <input type="file" id="imgCloseUp" class="file-input" accept="image/*" onchange="processAndPreviewFile(this, 'previewCloseUp', 'closeUp')">
+                                    <img id="previewCloseUp" class="preview-img" src="${isEdit ? existingData.closeUp : '#'}" style="display: ${isEdit ? 'block' : 'none'};">
+                                </div>
+                                <div>
+                                    <label class="file-label" for="imgWide">📷 Wide Angle</label>
+                                    <input type="file" id="imgWide" class="file-input" accept="image/*" onchange="processAndPreviewFile(this, 'previewWide', 'wideAngle')">
+                                    <img id="previewWide" class="preview-img" src="${isEdit ? existingData.wideAngle : '#'}" style="display: ${isEdit ? 'block' : 'none'};">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Hazard Status</label>
+                            <div class="toggle-group">
+                                <div id="toggleUnresolved" class="toggle-btn ${currentStatusSelection==='unresolved'?'active-unresolved':''}" onclick="setStatusToggle('unresolved')">Unresolved</div>
+                                <div id="toggleResolved" class="toggle-btn ${currentStatusSelection==='resolved'?'active-resolved':''}" onclick="setStatusToggle('resolved')">Resolved</div>
+                            </div>
+                        </div>
 
-            const closeupBase64 = await compressAndConvertImage(document.getElementById('hazard-closeup-img').files[0]);
-            const wideangleBase64 = await compressAndConvertImage(document.getElementById('hazard-wideangle-img').files[0]);
+                        <div id="unresolvedSection" class="dynamic-section section-unresolved" style="display: ${currentStatusSelection==='unresolved'?'block':'none'};">
+                            <label style="font-size:11px; font-weight:600; color:#0369a1;">Temporary Mitigation Photo (Required):</label>
+                            <label class="file-label" for="imgMadeSafe" style="margin-top:4px; background-color: #f0f9ff; border-color: #7dd3fc;">📷 Upload Made Safe Photo</label>
+                            <input type="file" id="imgMadeSafe" class="file-input" accept="image/*" onchange="processAndPreviewFile(this, 'previewMadeSafe', 'madeSafePhoto')">
+                            <img id="previewMadeSafe" class="preview-img" src="${isEdit && existingData.madeSafePhoto ? existingData.madeSafePhoto : '#'}" style="display: ${isEdit && existingData.madeSafePhoto ? 'block' : 'none'};">
+                        </div>
 
-            const closeupUrl = await uploadPhotoToCloudStorage(closeupBase64, "closeup");
-            const wideangleUrl = await uploadPhotoToCloudStorage(wideangleBase64, "wideangle");
+                        <div id="resolvedSection" class="dynamic-section section-resolved" style="display: ${currentStatusSelection==='resolved'?'block':'none'};">
+                            ${isEdit && existingData.madeSafePhoto ? `
+                                <div style="margin-bottom: 10px;">
+                                    <label style="font-size:11px; font-weight:600; color:#15803d; display:block; margin-bottom:4px;">Retained Made Safe Photo:</label>
+                                    <img src="${existingData.madeSafePhoto}" style="width:100%; height:70px; object-fit:cover; border-radius:4px; border:1px solid #cbd5e1;">
+                                </div>
+                            ` : ''}
+                            <div class="form-group" style="margin-bottom:6px;">
+                                <label style="color:#15803d;">Action Taken to Resolve</label>
+                                <input type="text" id="actionTakenInput" class="form-control" value="${isEdit && existingData.actionTaken ? existingData.actionTaken : ''}" placeholder="How was it fixed?">
+                            </div>
+                            <label class="file-label" for="imgResolved" style="background-color: #f0fff4; border-color: #9ae6b4;">📷 Photo After (Required)</label>
+                            <input type="file" id="imgResolved" class="file-input" accept="image/*" onchange="processAndPreviewFile(this, 'previewResolved', 'resolutionPhoto')">
+                            <img id="previewResolved" class="preview-img" src="${isEdit && existingData.resolutionPhoto ? existingData.resolutionPhoto : '#'}" style="display: ${isEdit && existingData.resolutionPhoto ? 'block' : 'none'};">
+                        </div>
 
-            const newHazard = {
-                id: Date.now(),
-                floorSlot: currentActiveFloor,
-                staff: staff,
-                timestamp: document.getElementById('hazard-time').value,
-                isoDate: makeIsoDateString(new Date()),
-                coordinates: document.getElementById('hazard-coords').value,
-                title: title,
-                description: document.getElementById('hazard-desc').value.trim(),
-                lat: lat, lng: lng, status: 'Unresolved',
-                closeupPhoto: closeupUrl,
-                wideanglePhoto: wideangleUrl,
-                interimPhoto: null,
-                afterPhoto: null
+                        <div class="btn-container">
+                            <button type="button" class="btn btn-cancel" onclick="cancelReport('${reportId}', ${isEdit})">Cancel</button>
+                            <button type="button" class="btn btn-submit" onclick="submitReport('${fixedLat}', '${fixedLng}', '${reportId}', ${isEdit})">Submit</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            
+            activeMarker.bindPopup(formHtml, { closeOnClick: false, autoClose: false, autoPan: false }).openPopup();
+            
+            const el = activeMarker.getElement();
+            if (el) {
+                el.classList.toggle('marker-resolved-green', currentStatusSelection === 'resolved');
+            }
+            
+            const maxBoundsY = plansData[activePlanId].bounds[1][0];
+            const bottomShiftOffset = maxBoundsY * 0.40; 
+            
+            map.setView([parseFloat(lat) + bottomShiftOffset, parseFloat(lng)], 0, { animate: true });
+        };
+
+        window.setStatusToggle = function(status) {
+            currentStatusSelection = status;
+            const isUnresolved = status === 'unresolved';
+            document.getElementById('toggleUnresolved').className = `toggle-btn ${isUnresolved ? 'active-unresolved' : ''}`;
+            document.getElementById('toggleResolved').className = `toggle-btn ${!isUnresolved ? 'active-resolved' : ''}`;
+            document.getElementById('unresolvedSection').style.display = isUnresolved ? "block" : "none";
+            document.getElementById('resolvedSection').style.display = isUnresolved ? "none" : "block";
+        };
+
+        window.processAndPreviewFile = function(input, previewId, fileKey) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const maxDimension = 800; 
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (Math.max(width, height) > maxDimension) {
+                        const factor = maxDimension / Math.max(width, height);
+                        width = Math.round(width * factor);
+                        height = Math.round(height * factor);
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+
+                    const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                    const preview = document.getElementById(previewId);
+                    preview.src = compressedDataUrl;
+                    preview.style.display = "block";
+                    uploadedFiles[fileKey] = compressedDataUrl;
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
+
+        window.submitReport = function(lat, lng, reportId, isEdit) {
+            const reporter = document.getElementById('reporter').value;
+            const locationNote = document.getElementById('locationNote').value;
+            const type = document.getElementById('hazardType').value;
+            const description = document.getElementById('description').value || "No additional description provided.";
+            const actionTaken = document.getElementById('actionTakenInput') ? document.getElementById('actionTakenInput').value : '';
+            
+            if (!reporter || !locationNote) return alert('Please complete all required fields.');
+            if (!uploadedFiles.closeUp || !uploadedFiles.wideAngle) return alert('Please attach both required baseline photos.');
+            if (currentStatusSelection === 'unresolved' && !uploadedFiles.madeSafePhoto) return alert('You must upload a "Made Safe" photo.');
+            if (currentStatusSelection === 'resolved' && !uploadedFiles.resolutionPhoto) return alert('You must upload an "After" resolution photo.');
+
+            const now = new Date();
+            const existingRecord = globalReportsDb[reportId];
+            
+            const originalTimestamp = isEdit && existingRecord ? existingRecord.timestamp : now.toLocaleString();
+            const lastUpdatedTimestamp = isEdit ? `${now.toLocaleString()} by ${standardUserSessionName}` : null;
+
+            const reportPayload = {
+                lat, lng, reporter, locationNote, type, description, actionTaken,
+                status: currentStatusSelection,
+                associatedPlanId: activePlanId, 
+                closeUp: uploadedFiles.closeUp,
+                wideAngle: uploadedFiles.wideAngle,
+                madeSafePhoto: uploadedFiles.madeSafePhoto,
+                resolutionPhoto: uploadedFiles.resolutionPhoto,
+                isoDate: isEdit && existingRecord ? existingRecord.isoDate : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+                timestamp: originalTimestamp,
+                lastUpdated: lastUpdatedTimestamp,
+                createdTimeValue: isEdit && existingRecord ? existingRecord.createdTimeValue : now.getTime()
             };
 
-            try {
-                await addDoc(collection(db, "hazards"), newHazard);
+            // Sync the structured item up directly to your cloud Firebase node path
+            database.ref('reports/' + reportId).set(reportPayload)
+            .then(() => {
                 map.closePopup();
-                if (temporaryMarker) { map.removeLayer(temporaryMarker); temporaryMarker = null; }
-            } catch (err) {
-                console.error("Cloud Database Write Refused: ", err);
-                alert("Database upload error: " + err.message);
-                submitBtn.innerText = "Submit Report";
-                submitBtn.disabled = false;
-            }
-        }
-
-        function updateMarkerPopup(marker, hazard) {
-            const colors = { 'Unresolved': '#e74c3c', 'Resolved': '#2ecc71', 'Made Safe': '#f39c12' };
-            marker.bindPopup(`
-                <div style="max-width: 250px;">
-                    <b style="font-size:1.1rem; color:${colors[hazard.status] || '#333'};">${hazard.title}</b><br>
-                    <span style="font-size:0.75rem; color:#666;">By: ${hazard.staff} on ${hazard.timestamp}</span><br>
-                    <p style="margin:6px 0; background:#f5f5f5; padding:4px; font-size:0.85rem;">${hazard.description || 'No description.'}</p>
-                    <b>Status:</b> ${hazard.status}
-                </div>
-            `);
-        }
-
-        async function updateStatus(docId, statusString) {
-            const docRef = doc(db, "hazards", docId);
-            await updateDoc(docRef, { status: statusString });
-        }
-
-        async function processInlinePhoto(docId, inputId, storagePrefix, databaseProperty, statusString) {
-            const fileElement = document.getElementById(`${inputId}-${docId}`);
-            if (!fileElement || !fileElement.files[0]) return alert("Please capture an image first!");
-            
-            const actionBtn = fileElement.nextElementSibling;
-            const originalText = actionBtn.innerText;
-            actionBtn.innerText = "Syncing Upload...";
-            actionBtn.disabled = true;
-
-            const base64Data = await compressAndConvertImage(fileElement.files[0]);
-            const downloadUrl = await uploadPhotoToCloudStorage(base64Data, storagePrefix);
-
-            if (downloadUrl) {
-                const docRef = doc(db, "hazards", docId);
-                const updates = { status: statusString };
-                updates[databaseProperty] = downloadUrl;
-                
-                await updateDoc(docRef, updates);
-            } else {
-                actionBtn.innerText = originalText;
-                actionBtn.disabled = false;
-                alert("Photo upload failed.");
-            }
-        }
-
-        function renderCalendar() {
-            const grid = document.getElementById('calendar-grid');
-            if(!grid) return;
-            grid.innerHTML = '';
-            const y = currentCalendarDate.getFullYear(), m = currentCalendarDate.getMonth();
-            document.getElementById('cal-month-year').innerText = currentCalendarDate.toLocaleString('default', { month: 'long', year: 'numeric' });
-
-            ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].forEach(d => {
-                const l = document.createElement('div'); l.className = 'weekday-label'; l.innerText = d; grid.appendChild(l);
+                activeMarker = null;
+            })
+            .catch((err) => {
+                alert("Database synchronization dropped: " + err.message);
             });
+        };
 
-            for (let i = 0; i < new Date(y, m, 1).getDay(); i++) {
-                const e = document.createElement('div'); e.className = 'cal-day empty'; grid.appendChild(e);
-            }
-
-            for (let d = 1; d <= new Date(y, m + 1, 0).getDate(); d++) {
-                const cell = document.createElement('div'); cell.className = 'cal-day'; cell.innerText = d;
-                const iso = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        function startCloudDatabaseSyncListener() {
+            // Listen live to data updates flowing out from your dedicated Firebase environment
+            database.ref('reports/').on('value', (snapshot) => {
+                const data = snapshot.val();
                 
-                cell.classList.toggle('has-records', hazards.some(h => h.isoDate === iso));
-                cell.classList.toggle('selected', selectedFilterDateString === iso);
-                cell.onclick = () => {
-                    selectedFilterDateString = selectedFilterDateString === iso ? null : iso;
-                    document.getElementById('filter-banner').style.display = selectedFilterDateString ? 'flex' : 'none';
-                    document.getElementById('filter-text').innerText = `Active Filter: ${iso}`;
-                    renderCalendar(); synchronizeMarkerLayers(); updateSidebar();
-                };
-                grid.appendChild(cell);
-            }
-        }
-
-        function adjustMonth(dir) { currentCalendarDate.setMonth(currentCalendarDate.getMonth() + dir); renderCalendar(); }
-        function clearDateFilter() { selectedFilterDateString = null; document.getElementById('filter-banner').style.display = 'none'; renderCalendar(); synchronizeMarkerLayers(); updateSidebar(); }
-
-        async function exportHazardsToPDF() {
-            const targets = selectedFilterDateString ? hazards.filter(h => h.isoDate === selectedFilterDateString) : hazards;
-            if (!targets.length) return;
-
-            const btn = document.getElementById('global-pdf-btn');
-            btn.disabled = true;
-
-            const blueprint = document.getElementById('pdf-render-blueprint');
-            blueprint.innerHTML = `<div class="pdf-header"><div class="pdf-title">Incident Operations Report</div></div>`;
-
-            targets.forEach((r, idx) => {
-                const card = document.createElement('div');
-                card.className = 'pdf-card';
-                card.innerHTML = `
-                    <div class="pdf-card-title">#${idx + 1} - ${r.title} [${r.status}]</div>
-                    <div class="pdf-row">
-                        <div class="pdf-details"><b>Location:</b> ${floorLabels[r.floorSlot]}<br><b>By:</b> ${r.staff}<br><p>${r.description || ''}</p></div>
-                        <div class="pdf-img-container">
-                            <div class="pdf-img-box"><span>Close-up</span><img src="${r.closeupPhoto || ''}"></div>
-                            <div class="pdf-img-box"><span>Wide-angle</span><img src="${r.wideanglePhoto || ''}"></div>
-                            <div class="pdf-img-box"><span>Interim</span><img src="${r.interimPhoto || ''}"></div>
-                            <div class="pdf-img-box"><span>Mitigated</span><img src="${r.afterPhoto || ''}"></div>
-                        </div>
-                    </div>`;
-                blueprint.appendChild(card);
-            });
-
-            const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const canvas = await html2canvas(blueprint, { scale: 1.5, useCORS: true });
-            pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 10, 15, 190, (canvas.height * 190) / canvas.width);
-            pdf.save('Hazard-Report.pdf');
-            blueprint.innerHTML = ""; btn.disabled = false;
-        }
-
-        function updateSidebar() {
-            const container = document.getElementById('hazard-list');
-            if(!container) return;
-            container.innerHTML = '';
-            const targets = selectedFilterDateString ? hazards.filter(h => h.isoDate === selectedFilterDateString) : hazards;
-
-            targets.forEach(h => {
-                const item = document.createElement('div');
-                item.className = `hazard-item ${h.status === 'Resolved' ? 'resolved' : h.status === 'Made Safe' ? 'madesafe' : ''}`;
-                if (h.floorSlot !== currentActiveFloor) item.style.opacity = "0.5";
-
-                let content = `
-                    <h3>${h.title} <span style="font-size:0.65rem; background:#34495e; color:white; padding:2px; border-radius:3px; float:right;">${floorLabels[h.floorSlot]}</span></h3>
-                    <span class="hazard-meta"><b>Logged:</b> ${h.staff} on ${h.timestamp}</span>
-                    <div class="log-container">
-                        <div class="log-box"><img src="${h.closeupPhoto || ''}"><span>Close-up</span></div>
-                        <div class="log-box"><img src="${h.wideanglePhoto || ''}"><span>Wide</span></div>
-                        <div class="log-box"><img src="${h.interimPhoto || ''}"><span>Interim</span></div>
-                        <div class="log-box"><img src="${h.afterPhoto || ''}"><span>Mitigated</span></div>
-                    </div>
-                    <span class="status">${h.status}</span>`;
-
-                if (h.status !== 'Resolved') {
-                    content += `<div style="margin-top:10px; display:flex; flex-direction:column; gap:4px;">`;
-                    if (h.status !== 'Made Safe') {
-                        content += `
-                            <input type="file" id="inline-interim-file-${h.docId}" accept="image/*" capture="environment">
-                            <button class="action-btn safe-btn" onclick="event.stopPropagation(); updateSidebarInterimPhoto('${h.docId}')">🛡️ Mark Made Safe</button>`;
-                    }
-                    content += `
-                        <input type="file" id="inline-after-file-${h.docId}" accept="image/*" capture="environment">
-                        <button class="action-btn save-photo-btn" onclick="event.stopPropagation(); updateSidebarAfterPhoto('${h.docId}')">📸 Process Close-out</button>
-                        <button class="action-btn resolve-btn" onclick="event.stopPropagation(); setStatusResolved('${h.docId}')">✔ Manual Resolve</button>
-                    </div>`;
-                } else {
-                    content += `<button class="action-btn reopen-btn" onclick="event.stopPropagation(); setStatusUnresolved('${h.docId}')">↩ Reopen Case</button>`;
+                // Purely drop old layout objects to make clean room for fresh rendering
+                document.getElementById('reportList').innerHTML = '<div class="empty-state" id="emptyState" style="display:none;">No hazards reported yet.</div>';
+                for (const id in markersDb) {
+                    map.removeLayer(markersDb[id]);
                 }
-
-                item.innerHTML = content;
-                item.onclick = () => {
-                    if (h.floorSlot !== currentActiveFloor) selectFloorSlot(h.floorSlot);
-                    setTimeout(() => { map.setView([h.lat, h.lng], -1); }, 50);
-                };
-                container.appendChild(item);
+                markersDb = {};
+                
+                if (data) {
+                    globalReportsDb = data;
+                    document.getElementById('emptyState').style.display = 'none';
+                    
+                    Object.keys(data).forEach(reportId => {
+                        renderReportCardAndMapPin(reportId);
+                    });
+                } else {
+                    globalReportsDb = {};
+                    document.getElementById('emptyState').style.display = 'block';
+                }
+                
+                filterReportsByDate();
             });
         }
 
-        // Module scope extraction to the global structural layer
-        window.selectFloorSlot = selectFloorSlot;
-        window.handleFloorplanUpload = handleFloorplanUpload;
-        window.setStatusResolved = setStatusResolved;
-        window.setStatusUnresolved = setStatusUnresolved;
-        window.updateSidebarInterimPhoto = updateSidebarInterimPhoto;
-        window.updateSidebarAfterPhoto = updateSidebarAfterPhoto;
-        window.adjustMonth = adjustMonth;
-        window.clearDateFilter = clearDateFilter;
-        window.exportHazardsToPDF = exportHazardsToPDF;
+        function renderReportCardAndMapPin(reportId) {
+            const record = globalReportsDb[reportId];
+            if (!record) return;
+
+            const isResolved = record.status === 'resolved';
+            let verificationPhotoMarkup = '';
+            
+            if (record.madeSafePhoto || record.resolutionPhoto) {
+                verificationPhotoMarkup = `
+                    <div class="report-gallery-label">Mitigation & Resolution Photos:</div>
+                    <div class="report-photo-grid">
+                        <div>${record.madeSafePhoto ? `<div style="font-size:10px; color:#718096; margin-bottom:2px;">Made Safe Photo</div><img class="sidebar-preview-img" src="${record.madeSafePhoto}">` : ''}</div>
+                        <div>${isResolved && record.resolutionPhoto ? `<div style="font-size:10px; color:#718096; margin-bottom:2px;">Resolution Photo</div><img class="sidebar-preview-img" src="${record.resolutionPhoto}">` : ''}</div>
+                    </div>`;
+            }
+
+            const planBadgeLabel = record.associatedPlanId === 'plan1' ? 'Ground Floor' : 'First Floor';
+
+            const card = document.createElement('div');
+            card.className = 'summary-card';
+            card.id = reportId;
+            card.dataset.reportDate = record.isoDate;
+            card.dataset.status = record.status;
+            card.dataset.associatedPlan = record.associatedPlanId;
+            card.dataset.time = record.createdTimeValue;
+            card.onclick = () => openHazardForm(record.lat, record.lng, reportId, record);
+            
+            card.innerHTML = `
+                <div class="card-header">
+                    <h4 class="card-title">${record.type}</h4>
+                    <span class="badge ${isResolved ? 'badge-resolved' : 'badge-unresolved'}">${isResolved ? 'Resolved' : 'Unresolved'}</span>
+                </div>
+                <div class="card-actions">
+                    <button class="btn-card-print" onclick="printSingleCard(event, '${reportId}')">Print Report</button>
+                </div>
+                <div class="card-details">
+                    <span style="display:inline-block; font-size:10px; background:#e2e8f0; padding:2px 6px; border-radius:4px; font-weight:700; margin-bottom:6px; color:#475569;">${planBadgeLabel}</span><br>
+                    <strong>Reported By:</strong> ${record.reporter}<br>
+                    <strong>Timestamp:</strong> ${record.timestamp}<br>
+                    ${record.lastUpdated ? `<strong>Last Updated:</strong> ${record.lastUpdated}<br>` : ''}
+                    <strong>Plan Coordinates:</strong> Y: ${record.lat}, X: ${record.lng}<br>
+                    <strong>Location Note:</strong> ${record.locationNote}<br>
+                    <strong>Description:</strong> ${record.description}
+                    ${isResolved && record.actionTaken ? `<br><strong>Action:</strong> ${record.actionTaken}` : ''}
+                    <div class="report-gallery-label">Initial Evidence:</div>
+                    <div class="report-photo-grid">
+                        <div><img class="sidebar-preview-img" src="${record.closeUp}"></div>
+                        <div><img class="sidebar-preview-img" src="${record.wideAngle}"></div>
+                    </div>
+                    ${verificationPhotoMarkup}
+                </div>`;
+            
+            const reportList = document.getElementById('reportList');
+            const existingCards = Array.from(reportList.getElementsByClassName('summary-card'));
+            let inserted = false;
+
+            for (let checkCard of existingCards) {
+                const checkStatus = checkCard.dataset.status;
+                if ((!isResolved && checkStatus === 'resolved') || (record.createdTimeValue > parseInt(checkCard.dataset.time, 10) && (!isResolved || checkStatus === 'resolved'))) {
+                    reportList.insertBefore(card, checkCard);
+                    inserted = true;
+                    break;
+                }
+            }
+            if (!inserted) reportList.appendChild(card);
+
+            let targetMarker = markersDb[reportId];
+            if (!targetMarker) {
+                targetMarker = L.marker([record.lat, record.lng], {
+                    icon: new L.Icon.Default({ className: isResolved ? 'marker-resolved-green' : '' }),
+                    id: reportId
+                });
+                markersDb[reportId] = targetMarker;
+            } else {
+                targetMarker.options.icon.options.className = isResolved ? 'marker-resolved-green' : '';
+            }
+
+            if (record.associatedPlanId === activePlanId) {
+                targetMarker.addTo(map);
+            }
+
+            const updateMarkerClass = () => {
+                const el = targetMarker.getElement();
+                if (el) {
+                    el.classList.toggle('marker-resolved-green', isResolved);
+                }
+            };
+            
+            updateMarkerClass();
+            targetMarker.on('add', updateMarkerClass); 
+            setTimeout(updateMarkerClass, 100);       
+
+            targetMarker.unbindPopup().bindPopup(`<b>${record.type} (${isResolved ? 'Resolved' : 'Unresolved'})</b><br>${record.locationNote}`);
+            targetMarker.on('click', () => openHazardForm(record.lat, record.lng, reportId, record));
+        }
+
+        window.cancelReport = function(reportId, isEdit) {
+            if (activeMarker) { 
+                map.closePopup();
+                if (!isEdit) map.removeLayer(activeMarker); 
+                activeMarker = null; 
+            }
+            fitAllPinsOnMap();
+        };
+
+        window.filterReportsByDate = function() {
+            const filterValue = document.getElementById('reportDateFilter').value;
+            const cards = Array.from(document.getElementsByClassName('summary-card'));
+            let visibleCount = 0;
+
+            cards.forEach(card => {
+                const matchesPlan = card.dataset.associatedPlan === activePlanId;
+                const matchesDate = !filterValue || card.dataset.reportDate === filterValue;
+                
+                const visible = matchesPlan && matchesDate;
+                card.style.display = visible ? "block" : "none";
+                if (visible) visibleCount++;
+            });
+
+            for (const reportId in markersDb) {
+                const record = globalReportsDb[reportId];
+                const shouldBeVisible = record && 
+                                        record.associatedPlanId === activePlanId && 
+                                        (!filterValue || record.isoDate === filterValue);
+                
+                if (shouldBeVisible && !map.hasLayer(markersDb[reportId])) map.addLayer(markersDb[reportId]);
+                if (!shouldBeVisible && map.hasLayer(markersDb[reportId])) map.removeLayer(markersDb[reportId]);
+            }
+
+            const emptyState = document.getElementById('emptyState');
+            emptyState.style.display = visibleCount === 0 ? 'block' : 'none';
+            emptyState.innerText = cards.filter(c => c.dataset.associatedPlan === activePlanId).length === 0 
+                ? "No hazards reported on this layout yet." 
+                : "No matching records discovered for this filtered target window date.";
+        };
+
+        window.resetDateFilter = function() {
+            document.getElementById('reportDateFilter').value = '';
+            filterReportsByDate();
+        };
     </script>
-    
 </body>
 </html>
